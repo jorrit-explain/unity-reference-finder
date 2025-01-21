@@ -42,5 +42,6 @@ jobs:
         env:
           MAIN_BRANCH: main
           PACKAGE_ROOT: Assets/Reference Finder
+          $ROOT_FILES: README.md CHANGELOG.md LICENSE.md
           TAG: ${{steps.tag.outputs.name}}
           UPM_BRANCH: upm
