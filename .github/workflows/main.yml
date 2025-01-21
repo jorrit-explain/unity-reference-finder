@@ -1,0 +1,46 @@
+name: Create UPM Branch
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get tag name
+        id: tag
+        run: echo ::set-output name=name::${GITHUB_REF#refs/tags/}
+
+      - name: Create UPM branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git subtree split -P "$PACKAGE_ROOT" -b $UPM_BRANCH
+          git checkout $UPM_BRANCH
+          for file in $ROOT_FILES; do
+              git checkout $MAIN_BRANCH $file &> /dev/null || echo $file is not found
+              if [ -f $file ]; then
+                  cp package.json.meta $file.meta
+                  UUID=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
+                  sed -i -e "s/guid:.*$/guid: $UUID/" $file.meta
+                  git add $file.meta
+              fi
+          done
+          sed -i -e "s/\"version\":.*$/\"version\": \"$TAG\",/" package.json || echo package.json is not found
+          git add package.json
+          git commit -m "Release $TAG."
+          git push -f origin $UPM_BRANCH
+          git checkout -b $UPM_BRANCH@$TAG
+          git push -f origin $UPM_BRANCH@$TAG
+        env:
+          MAIN_BRANCH: main
+          PACKAGE_ROOT: Assets/Reference Finder
+          TAG: ${{steps.tag.outputs.name}}
+          UPM_BRANCH: upm
