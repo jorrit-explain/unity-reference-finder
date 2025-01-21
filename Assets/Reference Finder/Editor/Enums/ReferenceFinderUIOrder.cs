@@ -9,9 +9,9 @@ namespace ReferenceFinder.Enums
     public enum ReferenceFinderUIOrder
     {
         Toolbar = 0,
-        SearchType = 1,
-        SearchParameters = 2,
-        FindReferences = 3,
+        SearchTypeEnumField = 1,
+        ObjectField = 2,
+        FindReferencesButton = 3,
         ReferencesLists = 4,
     }
 }

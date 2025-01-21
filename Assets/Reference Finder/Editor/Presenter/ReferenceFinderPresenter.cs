@@ -1,14 +1,13 @@
 using System.Collections.Generic;
-using Object = UnityEngine.Object;
-using GameObject = UnityEngine.GameObject;
-using ScriptableObject = UnityEngine.ScriptableObject;
-using Component = UnityEngine.Component;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 using ReferenceFinder.Enums;
 using ReferenceFinder.Extensions;
 using ReferenceFinder.Model;
 using ReferenceFinder.Utils;
-using UnityEditor.SceneManagement;
+using System.Linq;
 
 namespace ReferenceFinder.Editor
 {
@@ -17,6 +16,8 @@ namespace ReferenceFinder.Editor
     /// </summary>
     public class ReferenceFinderPresenter
     {
+        const string PrefabPreviewStagename = "Prefab preview stage";
+
         private ReferenceFinderView _view;
         private LogLevel _logLevel = LogLevel.ErrorOnly;
         private SearchType _currentSearchType;
@@ -31,7 +32,7 @@ namespace ReferenceFinder.Editor
         public ReferenceFinderPresenter(ReferenceFinderView view)
         {
             _view = view;
-            _currentSearchType = SearchType.AutoGameObject;
+            _currentSearchType = SearchType.GameObject;
         }
 
         /// <summary>
@@ -108,6 +109,18 @@ namespace ReferenceFinder.Editor
             _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.ReferencesLists);
             Dictionary<string, Object[]> objectsPerSceneDictionary = new Dictionary<string, Object[]>();
 
+            // Check for prefab instances in scenes and prefab stage
+            var prefabAssetType = PrefabUtility.GetPrefabAssetType(_objectData.FoundObject);
+            switch (prefabAssetType)
+            {
+                case PrefabAssetType.Regular:
+                case PrefabAssetType.Model:
+                case PrefabAssetType.Variant:
+                    GetPrefabInstancesInPrefabStage(objectsPerSceneDictionary);
+                    GetPrefabInstancesPerScene(objectsPerSceneDictionary, GetGameObjectsPerScene());
+                    break;
+            }
+            
             GetReferencesInPrefabStage(objectsPerSceneDictionary);
             GetReferencesPerScene(objectsPerSceneDictionary, GetGameObjectsPerScene());
             GetReferencesInAssets(objectsPerSceneDictionary);
@@ -115,7 +128,33 @@ namespace ReferenceFinder.Editor
             {
                 return;
             }
-            _view.ShowReferencesPerScene(objectsPerSceneDictionary);
+            _view.ShowReferencesPerLocation(objectsPerSceneDictionary);
+        }
+
+        
+        private void GetPrefabInstancesInPrefabStage(Dictionary<string, Object[]> objectsWithReferencesPerLocationDictionary)
+        {
+            Stage currentStage = StageUtility.GetCurrentStage();
+            // Prefab preview has the name as empty
+            if (currentStage.name != string.Empty)
+            {
+                return;
+            }
+
+            var assetPath = AssetDatabase.GetAssetPath(_objectData.FoundObject);
+            Object[] objectsWithReferences = GetPrefabInstances(currentStage.FindGameObjectsInStage(), assetPath);
+            objectsWithReferencesPerLocationDictionary.Add(PrefabPreviewStagename, objectsWithReferences);
+        }
+
+        private void GetPrefabInstancesPerScene(Dictionary<string, Object[]> objectsWithReferencesPerLocationDictionary, Dictionary<Scene, GameObject[]> objectsPerSceneDictionary)
+        {
+            var assetPath = AssetDatabase.GetAssetPath(_objectData.FoundObject);
+
+            foreach (Scene scene in objectsPerSceneDictionary.Keys)
+            {
+                Object[] objectsWithReferences = GetPrefabInstances(objectsPerSceneDictionary[scene], assetPath);
+                objectsWithReferencesPerLocationDictionary.Add(scene.name, objectsWithReferences);
+            }
         }
 
         /// <summary>
@@ -134,7 +173,14 @@ namespace ReferenceFinder.Editor
                 return;
             }
             Object[] objectsWithReferences = GetReferences(currentStage.FindGameObjectsInStage());
-            objectsWithReferencesPerLocationDictionary.Add("Prefab preview stage", objectsWithReferences);
+            if (objectsWithReferencesPerLocationDictionary.TryGetValue(PrefabPreviewStagename, out var currentObjectsWithReferences))
+            {
+                objectsWithReferencesPerLocationDictionary[PrefabPreviewStagename] = currentObjectsWithReferences.Union(objectsWithReferences).ToArray();
+            }
+            else
+            {
+                objectsWithReferencesPerLocationDictionary.Add(PrefabPreviewStagename, objectsWithReferences);
+            }
         }
 
         /// <summary>
@@ -152,7 +198,14 @@ namespace ReferenceFinder.Editor
             foreach (Scene scene in objectsPerSceneDictionary.Keys)
             {
                 Object[] objectsWithReferences = GetReferences(objectsPerSceneDictionary[scene]);
-                objectsWithReferencesPerLocationDictionary.Add(scene.name, objectsWithReferences);
+                if (objectsWithReferencesPerLocationDictionary.TryGetValue(scene.name, out var currentObjectsWithReferences))
+                {
+                    objectsWithReferencesPerLocationDictionary[scene.name] = currentObjectsWithReferences.Union(objectsWithReferences).ToArray();
+                }
+                else
+                {
+                    objectsWithReferencesPerLocationDictionary.Add(scene.name, objectsWithReferences);
+                }
             }
         }
 
@@ -192,6 +245,22 @@ namespace ReferenceFinder.Editor
             string locationName = "Assets (ScriptableObjects)";
             Object[] objectsWithReferences = GetReferences(EditorUtils.GetAllScriptableObjectsFromProject());
             objectsWithReferencesPerLocationDictionary.Add(locationName, objectsWithReferences);
+        }
+
+        private Object[] GetPrefabInstances(Object[] objects, string assetPath)
+        {
+            List<Object> objectsWithReferences = new List<Object>();
+            foreach (Object objectToFindReference in objects)
+            {
+                var prefabInstanceStatus = PrefabUtility.GetPrefabInstanceStatus(objectToFindReference);
+                if (prefabInstanceStatus != PrefabInstanceStatus.Connected)
+                    continue;
+
+                var nearestRootPath = PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(objectToFindReference);
+                if (assetPath == nearestRootPath)
+                    objectsWithReferences.Add(objectToFindReference);
+            }
+            return objectsWithReferences.ToArray();
         }
 
         /// <summary>
@@ -327,8 +396,10 @@ namespace ReferenceFinder.Editor
         {
             _objectData = null;
             _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.ReferencesLists);
-            _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.FindReferences);
-            _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.SearchParameters);
+            _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.FindReferencesButton);
+            _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.SearchTypeEnumField);
+            _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.ObjectField);
+            _view.CreateSearchTypeField(_currentSearchType);
             _view.CreateObjectField(_currentSearchType);
             _view.CreateFindReferencesElements();
         }
@@ -344,7 +415,7 @@ namespace ReferenceFinder.Editor
         /// </returns>
         private bool CheckHierarchyCheckRequirements()
         {
-            return _currentSearchType == SearchType.AutoGameObject
+            return _currentSearchType == SearchType.GameObject
                 && _objectData != null
                 && _objectData.FoundObject is GameObject gameObject
                 && !gameObject.IsPrefabAsset();
@@ -370,7 +441,7 @@ namespace ReferenceFinder.Editor
                 buttonState = true;
             }
             _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.ReferencesLists);
-            _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.FindReferences);
+            _view.ClearRootAtIndex((int)ReferenceFinderUIOrder.FindReferencesButton);
             _view.CreateFindReferencesElements(tooltip, buttonState);
         }
 
@@ -380,7 +451,7 @@ namespace ReferenceFinder.Editor
         public void Reset()
         {
             _objectData = null;
-            _currentSearchType = SearchType.AutoGameObject;
+            _currentSearchType = SearchType.GameObject;
         }
 
         /// <summary>

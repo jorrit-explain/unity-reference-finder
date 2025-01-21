@@ -22,5 +22,21 @@ namespace ReferenceFinder.Extensions
         {
             return serializedProperty.propertyType == SerializedPropertyType.ObjectReference;
         }
+        
+        /// <summary>
+        /// Extension method that checks if the serialized property is a
+        /// <see cref="UnityEvent"/>.
+        /// </summary>
+        /// <param name="serializedProperty">
+        /// SerializedProperty to check if is unity event
+        /// </param>
+        /// <returns>
+        /// True if it is a <see cref="UnityEvent"/>, false otherwise
+        /// </returns>
+        public static bool IsUnityEvent(this SerializedProperty serializedProperty)
+        {
+            return serializedProperty.propertyType == SerializedPropertyType.Generic
+                   && serializedProperty.type == "UnityEvent";
+        }
     }
 }

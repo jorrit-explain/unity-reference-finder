@@ -8,8 +8,8 @@ namespace ReferenceFinder.Enums
     [Serializable]
     public enum SearchType
     {
-        AutoGameObject,
-        AutoScriptableObject,
+        GameObject,
+        ScriptableObject,
         Any,
     }
 }

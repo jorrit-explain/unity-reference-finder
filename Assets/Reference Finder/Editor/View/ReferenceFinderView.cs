@@ -6,10 +6,11 @@ using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UIElements;
-using Object = UnityEngine.Object;
 using ReferenceFinder.Enums;
 using ReferenceFinder.Extensions;
 using ReferenceFinder.Utils;
+
+using Object = UnityEngine.Object;
 
 namespace ReferenceFinder.Editor
 {
@@ -25,11 +26,56 @@ namespace ReferenceFinder.Editor
         /// <summary>
         /// Static method called to show UI in the editor.
         /// </summary>
-        [MenuItem("Window/rhaelzo/Reference finder")]
+        [MenuItem("Tools/Reference Finder")]
         public static void ShowUI()
         {
             ReferenceFinderView window = GetWindow<ReferenceFinderView>();
             window.titleContent = new GUIContent("Reference Finder");
+        }
+
+        [MenuItem("Assets/Find References", true)]
+        public static bool CanContextFindReferences()
+        {
+            var activeObject = Selection.activeObject;
+            if (!activeObject)
+                return false;
+
+            // When right clicking in the project window without a specific asset under the mouse, we get a DefaultAsset...
+            return activeObject.GetType() != typeof(DefaultAsset);
+        }
+
+        /// <summary>
+        /// Static method which is available in the <em>Assets</em> menu as well as through
+        /// right click in the project window.
+        /// </summary>
+        [MenuItem("Assets/Find References", false, 21)]
+        public static void OnContextFindReferences()
+        {
+            // Show the UI
+            ReferenceFinderView window = GetWindow<ReferenceFinderView>();
+            window.titleContent = new GUIContent("Reference Finder");
+
+            var presenter = window._presenter;
+            var activeObject = Selection.activeObject;
+
+            // Changing the search type switches the object field...
+            switch (activeObject)
+            {
+                case GameObject _:
+                    presenter.ChangeSearchType(SearchType.GameObject);
+                    break;
+                case ScriptableObject _:
+                    presenter.ChangeSearchType(SearchType.ScriptableObject);
+                    break;
+                default:
+                    presenter.ChangeSearchType(SearchType.Any);
+                    break;
+            }
+            
+            // Set the data in the object field
+            window.rootVisualElement.Q<ObjectField>(className: "body-element").value = activeObject;
+
+            presenter.FindReferences();
         }
 
         /// <summary>
@@ -52,7 +98,7 @@ namespace ReferenceFinder.Editor
             {
                 InitializeView();
             }
-            _styleSheet = (StyleSheet)EditorGUIUtility.Load("Assets/Editor/ReferenceFinder/Styles/ReferenceFinderStyleSheet.uss");
+            _styleSheet = Resources.Load<StyleSheet>("ReferenceFinderStyleSheet");
             rootVisualElement.styleSheets.Add(_styleSheet);
             rootVisualElement.AddToClassList("root-element");
             _presenter.CreateGUI();
@@ -88,7 +134,7 @@ namespace ReferenceFinder.Editor
             toolbar.AddToClassList("toolbar-container");
             toolbar.Add(VisualElementUtils.CreateButton(OnClearClicked, "Clear", string.Empty).AddStyleClass("toolbar-button"));
             toolbar.Add(VisualElementUtils.CreateButton(OnRefreshClicked, "Refresh", string.Empty).AddStyleClass("toolbar-button"));
-            toolbar.Add(VisualElementUtils.CreateEnumField(OnLogLevelSelected, "Log level:", _presenter.GetCurrentLogLevel()));
+            toolbar.Add(VisualElementUtils.CreateEnumField(OnLogLevelSelected, "Log Level:", _presenter.GetCurrentLogLevel()));
             rootVisualElement.Insert((int)ReferenceFinderUIOrder.Toolbar, toolbar);
         }
 
@@ -98,10 +144,10 @@ namespace ReferenceFinder.Editor
         /// <param name="currentSearchType">
         /// Current value of the search type (Default value = SearchType.AutoGameObject)
         /// </summary>
-        public void CreateSearchTypeField(SearchType currentSearchType = SearchType.AutoGameObject)
+        public void CreateSearchTypeField(SearchType currentSearchType = SearchType.Any)
         {
-            rootVisualElement.Insert((int)ReferenceFinderUIOrder.SearchType
-                , VisualElementUtils.CreateEnumField(OnSearchTypeSelected, "Search type:", currentSearchType)
+            rootVisualElement.Insert((int)ReferenceFinderUIOrder.SearchTypeEnumField
+                , VisualElementUtils.CreateEnumField(OnSearchTypeSelected, "Search Type:", currentSearchType)
                 .AddStyleClass("body-element"));
         }
 
@@ -111,17 +157,17 @@ namespace ReferenceFinder.Editor
         /// <param name="currentSearchType">
         /// Current value of the search type (Default value = SearchType.AutoGameObject)
         /// </summary>
-        public void CreateObjectField(SearchType currentSearchType = SearchType.AutoGameObject)
+        public void CreateObjectField(SearchType currentSearchType = SearchType.Any)
         {
             bool searchOnScenes = false;
             Type objectType = null;
             switch (currentSearchType)
             {
-                case SearchType.AutoGameObject:
+                case SearchType.GameObject:
                     searchOnScenes = true;
                     objectType = typeof(GameObject);
                     break;
-                case SearchType.AutoScriptableObject:
+                case SearchType.ScriptableObject:
                     objectType = typeof(ScriptableObject);
                     break;
                 case SearchType.Any:
@@ -129,7 +175,8 @@ namespace ReferenceFinder.Editor
                     objectType = typeof(Object);
                     break;
             }
-            rootVisualElement.Insert((int)ReferenceFinderUIOrder.SearchParameters
+
+            rootVisualElement.Insert((int)ReferenceFinderUIOrder.ObjectField
                 , VisualElementUtils.CreateObjectField(OnObjectSelected, objectType, "Object:", searchOnScenes)
                 .AddStyleClass("body-element"));
         }
@@ -147,11 +194,11 @@ namespace ReferenceFinder.Editor
         {
             VisualElement tooltipElement = new VisualElement();
             tooltipElement.tooltip = tooltip;
-            Button findReferencesButton = VisualElementUtils.CreateButton(OnFindReferencesClicked, "Find references", string.Empty);
+            Button findReferencesButton = VisualElementUtils.CreateButton(OnFindReferencesClicked, "Find References", string.Empty);
             findReferencesButton.SetEnabled(buttonState);
             findReferencesButton.AddToClassList("find-references-element");
             tooltipElement.Add(findReferencesButton);
-            rootVisualElement.Insert((int)ReferenceFinderUIOrder.FindReferences, tooltipElement);
+            rootVisualElement.Insert((int)ReferenceFinderUIOrder.FindReferencesButton, tooltipElement);
         }
 
         /// <summary>
@@ -242,7 +289,7 @@ namespace ReferenceFinder.Editor
         /// <param name="objectsPerLocationDictionary">
         /// Dictionary with the list of objects in each location found
         /// </summary>
-        public void ShowReferencesPerScene(Dictionary<string, Object[]> objectsPerLocationDictionary)
+        public void ShowReferencesPerLocation(Dictionary<string, Object[]> objectsPerLocationDictionary)
         {
             ScrollView scrollView = new ScrollView();
             foreach (string sceneName in objectsPerLocationDictionary.Keys)
@@ -334,7 +381,7 @@ namespace ReferenceFinder.Editor
             {
                 rootVisualElement.styleSheets.Remove(_styleSheet);
             }
-            _styleSheet = (StyleSheet)EditorGUIUtility.Load("Assets/Editor/ReferenceFinder/Styles/ReferenceFinderStyleSheet.uss");
+            _styleSheet = Resources.Load<StyleSheet>("ReferenceFinderStyleSheet");
             rootVisualElement.styleSheets.Add(_styleSheet);
             rootVisualElement.AddToClassList("root-element");
             rootVisualElement.Clear();

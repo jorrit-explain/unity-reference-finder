@@ -1,11 +1,13 @@
 using System.Collections.Generic;
 using UnityEditor;
-using UnityEngine.SceneManagement;
-using GameObject = UnityEngine.GameObject;
-using ScriptableObject = UnityEngine.ScriptableObject;
-using Object = UnityEngine.Object;
-using ReferenceFinder.Extensions;
 using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using ReferenceFinder.Extensions;
+
+// using GameObject = UnityEngine.GameObject;
+// using Object = UnityEngine.Object;
+// using ScriptableObject = UnityEngine.ScriptableObject;
 
 namespace ReferenceFinder.Utils
 {
@@ -75,7 +77,7 @@ namespace ReferenceFinder.Utils
         /// </returns>
         public static ScriptableObject[] GetAllScriptableObjectsFromProject()
         {
-            string[] GUIDs = AssetDatabase.FindAssets("t:ScriptableObjects");
+            string[] GUIDs = AssetDatabase.FindAssets("t:ScriptableObject");
             List<ScriptableObject> scriptableObjects = new List<ScriptableObject>();
             foreach (string GUID in GUIDs)
             {
@@ -110,16 +112,39 @@ namespace ReferenceFinder.Utils
             SerializedProperty iterator = serializedComponent.GetIterator();
             while (iterator.NextVisible(true))
             {
-                if (iterator.propertyType == SerializedPropertyType.ObjectReference
-                    || iterator.propertyType == SerializedPropertyType.ManagedReference)
+                if (iterator.IsUnityEvent())
                 {
-                    if (iterator.objectReferenceValue == to)
+                    // We might have a UnityEvent here
+                    SerializedProperty persistentCalls = iterator.FindPropertyRelative("m_PersistentCalls.m_Calls");
+                    if (persistentCalls == null || persistentCalls.arraySize == 0)
+                        continue;
+                    
+                    for (int i = 0; i < persistentCalls.arraySize; i++)
                     {
-                        return true;
+                        SerializedProperty persistentCall = persistentCalls.GetArrayElementAtIndex(i);
+                        SerializedProperty persistentCallTarget = persistentCall.FindPropertyRelative("m_Target");
+                        if (persistentCallTarget == null)
+                            continue;
+
+                        if (HasReferenceTo(persistentCallTarget, to))
+                        {
+                            return true;
+                        }
                     }
                 }
+                else if (HasReferenceTo(iterator, to))
+                {
+                    return true;
+                }
             }
+            
             return false;
+        }
+
+        private static bool HasReferenceTo(SerializedProperty property, Object to)
+        {
+            if (!property.IsObjectReference()) return false;
+            return property.objectReferenceValue == to;
         }
     }
 }
