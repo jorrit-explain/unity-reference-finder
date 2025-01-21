@@ -16,7 +16,7 @@ jobs:
 
       - name: Get Tag Name
         id: tag
-        run: echo ::set-output name=name::${GITHUB_REF#refs/tags/}
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Create UPM branch
         run: |
@@ -44,5 +44,5 @@ jobs:
           MAIN_BRANCH: "main"
           PACKAGE_ROOT: "Assets/Reference Finder"
           ROOT_FILES: "README.md CHANGELOG.md LICENSE.md"
-          TAG: ${{steps.tag.outputs.name}}
+          TAG: ${{steps.tag.outputs.tag}}
           UPM_BRANCH: upm
