@@ -10,16 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v2
         with:
           fetch-depth: 0
 
-      - name: Get tag name
+      - name: Get Tag Name
         id: tag
         run: echo ::set-output name=name::${GITHUB_REF#refs/tags/}
 
       - name: Create UPM branch
         run: |
+          git checkout $MAIN_BRANCH
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git subtree split -P "$PACKAGE_ROOT" -b $UPM_BRANCH
@@ -40,8 +41,8 @@ jobs:
           git checkout -b $UPM_BRANCH@$TAG
           git push -f origin $UPM_BRANCH@$TAG
         env:
-          MAIN_BRANCH: main
-          PACKAGE_ROOT: Assets/Reference Finder
-          ROOT_FILES: README.md CHANGELOG.md LICENSE.md
+          MAIN_BRANCH: "main"
+          PACKAGE_ROOT: "Assets/Reference Finder"
+          ROOT_FILES: "README.md CHANGELOG.md LICENSE.md"
           TAG: ${{steps.tag.outputs.name}}
           UPM_BRANCH: upm
