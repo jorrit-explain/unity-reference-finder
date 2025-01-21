@@ -1,0 +1,18 @@
+{
+  "name": "com.softsausage.unity-reference-finder",
+  "displayName": "Reference Finder",
+  "version": "1.1.0",
+  "unity": "2020.3",
+  "description": "Provides the ability to find references of GameObjects (or their components), ScriptableObjects, prefabs and other assets in currently open and active scenes and in ScriptableObjects.",
+  "samples": [],
+  "hideInEditor": true,
+  "author": {
+    "name": "Rhaelzo",
+    "url": "https://github.com/Rhaelzo/unity-reference-finder"
+  },
+  "contributors": [
+    {
+      "name": "Jorrit de Vries"
+    }
+  ]
+}
