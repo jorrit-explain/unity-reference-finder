@@ -38,8 +38,8 @@ jobs:
           git add package.json
           git commit -m "Release $TAG."
           git push -f origin $UPM_BRANCH
-          git checkout -b $UPM_BRANCH@$TAG
-          git push -f origin $UPM_BRANCH@$TAG
+          git checkout -b $UPM_BRANCH-$TAG
+          git push -f origin $UPM_BRANCH-$TAG
         env:
           MAIN_BRANCH: "main"
           PACKAGE_ROOT: "Assets/Reference Finder"

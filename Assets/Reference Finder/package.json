@@ -12,7 +12,9 @@
   },
   "contributors": [
     {
-      "name": "Jorrit de Vries"
+      "name": "Jorrit de Vries",
+      "email": "j.dvries@explain.nl",
+      "url": "https://www.explain.nl"
     }
   ]
 }
